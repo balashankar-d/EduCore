@@ -2,6 +2,9 @@ const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
 const { getOrCreateRoom } = require("./room.js");
+const dotenv = require('dotenv');
+
+dotenv.config({ path: require('path').join(__dirname, '.env') });
 
 const app = express();
 const server = http.createServer(app);
@@ -12,6 +15,11 @@ const io = new Server(server, {
 app.use(express.static("public"));
 
 const rooms = {};
+
+const SIGNALING_LISTEN_IP = process.env.SIGNALING_LISTEN_IP || "0.0.0.0";
+const SIGNALING_ANNOUNCED_IP = process.env.SIGNALING_ANNOUNCED_IP || null;
+const SIGNALING_PORT = process.env.SIGNALING_PORT || 3001;
+const SIGNALING_STUN_URL = process.env.SIGNALING_STUN_URL || "stun:stun.l.google.com:19302";
 
 io.on("connection", async (socket) => {
   console.log("[Socket.IO] Client connected:", socket.id);
@@ -83,13 +91,13 @@ io.on("connection", async (socket) => {
       console.log(`[Mediasoup] createTransport requested by ${socket.id}, isProducer=${isProducer}`);
       try {
         const transport = await router.createWebRtcTransport({
-          listenIps: [{ ip: "192.168.29.172", announcedIp: "192.168.29.172" }], // <-- Replace with your server's LAN IP
+          listenIps: [{ ip: SIGNALING_LISTEN_IP, announcedIp: SIGNALING_ANNOUNCED_IP }],
           enableUdp: true,
           enableTcp: true,
           preferUdp: true,
           initialAvailableOutgoingBitrate: 1000000,
           iceServers: [
-            { urls: "stun:stun.l.google.com:19302" }
+            { urls: SIGNALING_STUN_URL }
           ]
         });
         console.log(`[Mediasoup] WebRtcTransport created: id=${transport.id}, isProducer=${isProducer}`);
@@ -276,6 +284,6 @@ io.on("connection", async (socket) => {
   }
 });
 
-server.listen(3001, () => {
-  console.log("✅ Server is running on http://localhost:3001");
+server.listen(SIGNALING_PORT, () => {
+  console.log(`✅ Server is running on http://${SIGNALING_LISTEN_IP}:${SIGNALING_PORT}`);
 });

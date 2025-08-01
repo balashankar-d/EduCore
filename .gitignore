@@ -1,0 +1,30 @@
+# Ignore Python cache and environment
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+venv/
+.env
+.env.*
+
+# Ignore node_modules and build
+node_modules/
+build/
+dist/
+
+# Ignore local SQLite DB
+*.sqlite3
+ailearn.db
+
+# Ignore VSCode settings
+.vscode/
+
+# Ignore logs
+*.log
+
+# Ignore frontend build artifacts
+frontend/build/
+frontend/.env
+
+# Ignore signaling env
+signaling/.env
