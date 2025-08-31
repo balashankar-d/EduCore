@@ -1,3 +1,18 @@
 Flask
 PyJWT
-flask-cors 
+flask-cors
+flask-sqlalchemy
+python-dateutil
+python-dotenv
+websockets
+
+# AI/ML Dependencies
+openai-whisper
+chromadb
+sentence-transformers
+numpy
+torch
+
+# Optional: For advanced audio processing
+# pydub
+# scipy 
