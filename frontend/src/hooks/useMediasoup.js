@@ -7,6 +7,8 @@ export const useMediasoup = (roomId, role, studentName = null) => {
     const [localStream, setLocalStream] = useState(null);
     const [remoteStream, setRemoteStream] = useState(null);
     const [joinedStudents, setJoinedStudents] = useState([]); // For teacher: list of joined students
+    const [messages, setMessages] = useState([]); // Chat messages
+    const [typingUsers, setTypingUsers] = useState([]); // Users currently typing
     const socketRef = useRef(null);
     const deviceRef = useRef(null);
     const producerRef = useRef(null);
@@ -29,6 +31,48 @@ export const useMediasoup = (roomId, role, studentName = null) => {
         });
     };
 
+    // Chat functions
+    const sendMessage = (message) => {
+        console.log('[useMediasoup] Sending message:', message);
+        return new Promise((resolve, reject) => {
+            if (!socketRef.current) {
+                reject(new Error('Socket not connected'));
+                return;
+            }
+            socketRef.current.emit('send-message', { message }, (response) => {
+                if (response?.error) {
+                    console.error('[useMediasoup] Error sending message:', response.error);
+                    reject(new Error(response.error));
+                } else {
+                    console.log('[useMediasoup] Message sent successfully:', response);
+                    resolve(response);
+                }
+            });
+        });
+    };
+
+    const sendTyping = (isTyping) => {
+        if (socketRef.current) {
+            socketRef.current.emit('typing', { isTyping });
+        }
+    };
+
+    const fetchChatHistory = async () => {
+        try {
+            console.log('[useMediasoup] Fetching chat history for room:', roomId);
+            const response = await fetch(`http://localhost:5000/chat/messages/${roomId}`);
+            if (response.ok) {
+                const data = await response.json();
+                console.log('[useMediasoup] Chat history fetched:', data);
+                setMessages(data.messages || []);
+            } else {
+                console.error('[useMediasoup] Failed to fetch chat history:', response.statusText);
+            }
+        } catch (error) {
+            console.error('[useMediasoup] Error fetching chat history:', error);
+        }
+    };
+
     const start = async () => {
         console.log('[useMediasoup] start() called with', { roomId, role, studentName });
         if (!roomId || !role) {
@@ -47,6 +91,28 @@ export const useMediasoup = (roomId, role, studentName = null) => {
             resolve();
         }));
         setStatus('Connected to server');
+        
+        // Chat event listeners
+        socket.on('new-message', (messageData) => {
+            console.log('[useMediasoup] new-message received:', messageData);
+            setMessages(prev => [...prev, messageData]);
+        });
+
+        socket.on('user-typing', (typingData) => {
+            console.log('[useMediasoup] user-typing received:', typingData);
+            const { senderName, isTyping } = typingData;
+            setTypingUsers(prev => {
+                if (isTyping) {
+                    return prev.includes(senderName) ? prev : [...prev, senderName];
+                } else {
+                    return prev.filter(name => name !== senderName);
+                }
+            });
+        });
+
+        // Fetch chat history after connecting
+        await fetchChatHistory();
+        
         // Listen for student join events (for teacher)
         if (role === 'teacher') {
             socket.on('student-joined', (name) => {
@@ -178,5 +244,16 @@ export const useMediasoup = (roomId, role, studentName = null) => {
         }
     };
 
-    return { status, localStream, remoteStream, start, joinedStudents };
+    return { 
+        status, 
+        localStream, 
+        remoteStream, 
+        start, 
+        joinedStudents, 
+        messages, 
+        typingUsers, 
+        sendMessage, 
+        sendTyping,
+        fetchChatHistory 
+    };
 };

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { useMediasoup } from '../hooks/useMediasoup';
+import ChatComponent from './ChatComponent';
 
 const VideoComponent = ({ sessionId, role, studentName }) => {
     // sessionId is now the roomId
@@ -8,7 +9,16 @@ const VideoComponent = ({ sessionId, role, studentName }) => {
     const remoteVideoRef = useRef();
 
     // 2. Initialize Mediasoup once roomId is available
-    const { localStream, remoteStream, start, joinedStudents } = useMediasoup(roomId, role, studentName);
+    const { 
+        localStream, 
+        remoteStream, 
+        start, 
+        joinedStudents, 
+        messages, 
+        typingUsers, 
+        sendMessage, 
+        sendTyping 
+    } = useMediasoup(roomId, role, studentName);
 
     // Debug: log props and roomId
     useEffect(() => {
@@ -131,28 +141,104 @@ const VideoComponent = ({ sessionId, role, studentName }) => {
     }
 
     return (
-        <div>
-            <h2>Video Session</h2>
-            <button onClick={() => { console.log('[VideoComponent] Start button clicked as', role); start(); }}>
-                Start as {role}
-            </button>
-            {role === 'teacher' && joinedStudents && (
-                <div style={{ margin: '16px 0', background: '#f3f4f6', padding: 12, borderRadius: 6 }}>
-                    <strong>Students Joined:</strong>
-                    <ul>
-                        {joinedStudents.length === 0 && <li>No students joined yet.</li>}
-                        {joinedStudents.map((name, idx) => <li key={idx}>{name}</li>)}
-                    </ul>
+        <div style={{ display: 'flex', gap: '20px', height: 'calc(100vh - 120px)' }}>
+            {/* Video Section */}
+            <div style={{ flex: 2, display: 'flex', flexDirection: 'column' }}>
+                <div style={{ marginBottom: '16px' }}>
+                    <h2>Video Session - {role.charAt(0).toUpperCase() + role.slice(1)}</h2>
+                    <button 
+                        onClick={() => { 
+                            console.log('[VideoComponent] Start button clicked as', role); 
+                            start(); 
+                        }}
+                        style={{
+                            backgroundColor: '#007bff',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '8px',
+                            padding: '12px 24px',
+                            fontSize: '16px',
+                            cursor: 'pointer',
+                            marginBottom: '16px'
+                        }}
+                    >
+                        Start as {role}
+                    </button>
                 </div>
-            )}
-            {role === 'teacher' && (
-                <>
-                  <h3>Local Video</h3>
-                  <video ref={localVideoRef} autoPlay muted playsInline />
-                </>
-            )}
-            <h3>Remote Video</h3>
-            <video ref={remoteVideoRef} autoPlay playsInline />
+
+                {role === 'teacher' && joinedStudents && (
+                    <div style={{ 
+                        margin: '16px 0', 
+                        background: '#f8f9fa', 
+                        padding: '12px', 
+                        borderRadius: '8px',
+                        border: '1px solid #e9ecef'
+                    }}>
+                        <strong>Students Joined ({joinedStudents.length}):</strong>
+                        {joinedStudents.length === 0 ? (
+                            <p style={{ margin: '8px 0', color: '#6c757d' }}>No students joined yet.</p>
+                        ) : (
+                            <ul style={{ margin: '8px 0', paddingLeft: '20px' }}>
+                                {joinedStudents.map((name, idx) => (
+                                    <li key={idx} style={{ margin: '4px 0' }}>{name}</li>
+                                ))}
+                            </ul>
+                        )}
+                    </div>
+                )}
+
+                {/* Video Elements */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', flex: 1 }}>
+                    {role === 'teacher' && (
+                        <div>
+                            <h3 style={{ margin: '0 0 8px 0' }}>Your Video (Local)</h3>
+                            <video 
+                                ref={localVideoRef} 
+                                autoPlay 
+                                muted 
+                                playsInline 
+                                style={{
+                                    width: '100%',
+                                    maxWidth: '500px',
+                                    height: 'auto',
+                                    backgroundColor: '#000',
+                                    borderRadius: '8px'
+                                }}
+                            />
+                        </div>
+                    )}
+                    
+                    <div>
+                        <h3 style={{ margin: '0 0 8px 0' }}>
+                            {role === 'teacher' ? 'Student View (Remote)' : 'Teacher Video (Remote)'}
+                        </h3>
+                        <video 
+                            ref={remoteVideoRef} 
+                            autoPlay 
+                            playsInline 
+                            style={{
+                                width: '100%',
+                                maxWidth: '500px',
+                                height: 'auto',
+                                backgroundColor: '#000',
+                                borderRadius: '8px'
+                            }}
+                        />
+                    </div>
+                </div>
+            </div>
+
+            {/* Chat Section */}
+            <div style={{ flex: 1, minWidth: '350px', maxWidth: '400px' }}>
+                <ChatComponent
+                    messages={messages}
+                    typingUsers={typingUsers}
+                    onSendMessage={sendMessage}
+                    onTyping={sendTyping}
+                    currentUserRole={role}
+                    currentUserName={role === 'teacher' ? 'Teacher' : studentName || 'Student'}
+                />
+            </div>
         </div>
     );
 };

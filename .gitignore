@@ -28,3 +28,41 @@ frontend/.env
 
 # Ignore signaling env
 signaling/.env
+
+# Ignore test files (Python, JS, etc.)
+test_*
+*_test.py
+tests/
+*.spec.js
+*.test.js
+*.test.jsx
+*.test.ts
+*.test.tsx
+
+# Ignore all README files except the main one in root
+**/README.md
+!README.md
+
+# Ignore docs and sample data
+*.md
+!README.md
+sample_*
+docs/
+examples/
+
+# Ignore config.py and empty files
+backend/config.py
+
+# Ignore audio scripts and folders
+backend/audio/
+backend/audio_*.py
+
+# Ignore ffmpeg binaries and folder
+backend/ffmpeg*
+backend/ffmpeg/
+
+# Ignore chroma_db binaries
+backend/chroma_db*
+
+# Ignore empty files
+*.empty

@@ -3,6 +3,7 @@ const http = require("http");
 const { Server } = require("socket.io");
 const { getOrCreateRoom } = require("./room.js");
 const dotenv = require('dotenv');
+const axios = require('axios'); // Add axios for HTTP requests to Flask backend
 
 dotenv.config({ path: require('path').join(__dirname, '.env') });
 
@@ -20,6 +21,25 @@ const SIGNALING_LISTEN_IP = process.env.SIGNALING_LISTEN_IP || "0.0.0.0";
 const SIGNALING_ANNOUNCED_IP = process.env.SIGNALING_ANNOUNCED_IP || null;
 const SIGNALING_PORT = process.env.SIGNALING_PORT || 3001;
 const SIGNALING_STUN_URL = process.env.SIGNALING_STUN_URL || "stun:stun.l.google.com:19302";
+const FLASK_BACKEND_URL = process.env.FLASK_BACKEND_URL || "http://localhost:5000";
+
+// Helper function to save message to Flask backend
+const saveMessageToDatabase = async (roomId, senderName, senderRole, message, isSystemMessage = false) => {
+  try {
+    const response = await axios.post(`${FLASK_BACKEND_URL}/chat/messages`, {
+      roomId,
+      senderName,
+      senderRole,
+      message,
+      isSystemMessage
+    });
+    console.log('[Chat] Message saved to database:', response.data);
+    return response.data;
+  } catch (error) {
+    console.error('[Chat] Failed to save message to database:', error.message);
+    throw error;
+  }
+};
 
 io.on("connection", async (socket) => {
   console.log("[Socket.IO] Client connected:", socket.id);
@@ -231,6 +251,95 @@ io.on("connection", async (socket) => {
         callback({ error: error.message });
       }
     });
+
+    // Chat message handling
+    socket.on("chat-message", async ({ roomId, senderName, senderRole, message }, callback) => {
+      console.log(`[Chat] Message from ${senderName} (${senderRole}): ${message}`);
+      try {
+        // Save message to database
+        await saveMessageToDatabase(roomId, senderName, senderRole, message);
+        // Broadcast message to all clients in the room
+        io.to(roomId).emit("chat-message", { senderName, senderRole, message });
+        callback({ status: "ok" });
+      } catch (error) {
+        console.error("[Chat] Error handling message:", error);
+        callback({ error: error.message });
+      }
+    });
+
+    // Chat functionality
+    socket.on('send-message', async (data, callback) => {
+      console.log('[Chat] send-message event received:', data);
+      try {
+        const { message } = data;
+        const senderName = role === 'teacher' ? 'Teacher' : (room.students.get(socket.id) || 'Unknown');
+        
+        // Save message to database
+        const savedMessage = await saveMessageToDatabase(roomId, senderName, role, message, false);
+        
+        // Broadcast message to all peers in the room
+        const messageData = {
+          id: savedMessage.id,
+          senderName,
+          senderRole: role,
+          message,
+          timestamp: Date.now(),
+          isSystemMessage: false
+        };
+        
+        // Send to all peers in the room
+        Object.values(room.peers).forEach(peer => {
+          peer.socket.emit('new-message', messageData);
+        });
+        
+        if (callback) callback({ success: true, messageId: savedMessage.id });
+        console.log('[Chat] Message broadcasted to room:', roomId);
+      } catch (error) {
+        console.error('[Chat] Error handling send-message:', error);
+        if (callback) callback({ error: error.message });
+      }
+    });
+
+    socket.on('typing', (data) => {
+      console.log('[Chat] typing event received:', data);
+      const senderName = role === 'teacher' ? 'Teacher' : (room.students.get(socket.id) || 'Unknown');
+      
+      // Broadcast typing indicator to all other peers in the room
+      Object.values(room.peers).forEach(peer => {
+        if (peer.socket.id !== socket.id) {
+          peer.socket.emit('user-typing', {
+            senderName,
+            senderRole: role,
+            isTyping: data.isTyping
+          });
+        }
+      });
+    });
+
+    // Send system message when student joins
+    if (role === 'student' && studentName) {
+      try {
+        const systemMessage = `${studentName} joined the class`;
+        await saveMessageToDatabase(roomId, 'System', 'system', systemMessage, true);
+        
+        // Broadcast system message to all peers
+        const messageData = {
+          senderName: 'System',
+          senderRole: 'system',
+          message: systemMessage,
+          timestamp: Date.now(),
+          isSystemMessage: true
+        };
+        
+        Object.values(room.peers).forEach(peer => {
+          peer.socket.emit('new-message', messageData);
+        });
+        
+        console.log('[Chat] System message sent for student join:', studentName);
+      } catch (error) {
+        console.error('[Chat] Error sending system message for student join:', error);
+      }
+    }
 
     // On disconnect, clean up
     socket.on("disconnect", () => {

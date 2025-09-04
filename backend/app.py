@@ -50,6 +50,26 @@ class Class(db.Model):
     room_id = db.Column(db.String(36), default=lambda: str(uuid.uuid4()))
     created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
 
+class ChatMessage(db.Model):
+    message_id = db.Column(db.Integer, primary_key=True)
+    room_id = db.Column(db.String(36), nullable=False, index=True)
+    sender_name = db.Column(db.String(255), nullable=False)
+    sender_role = db.Column(db.String(20), nullable=False)  # 'teacher' or 'student'
+    message_content = db.Column(db.Text, nullable=False)
+    timestamp = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+    is_system_message = db.Column(db.Boolean, default=False)  # For system notifications
+    
+    def to_dict(self):
+        return {
+            'id': self.message_id,
+            'roomId': self.room_id,
+            'senderName': self.sender_name,
+            'senderRole': self.sender_role,
+            'message': self.message_content,
+            'timestamp': int(self.timestamp.timestamp() * 1000),  # Convert to milliseconds
+            'isSystemMessage': self.is_system_message
+        }
+
 # JWT helper
 def encode_auth_token(user_id, user_type, email):
     print('DEBUG SECRET_KEY (encode):', app.config['SECRET_KEY'])
@@ -277,7 +297,126 @@ def get_student_me():
         'created_at': student.created_at
     })
 
-if __name__ == '__main__':
-    with app.app_context():
-        db.create_all()
-    app.run(debug=True)
+# Chat API Endpoints
+@app.route('/chat/messages/<room_id>', methods=['GET'])
+def get_chat_messages(room_id):
+    """Get chat message history for a room"""
+    try:
+        # Get pagination parameters
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 50, type=int)  # Default 50 messages per page
+        
+        # Query messages for the room, ordered by timestamp (oldest first for history)
+        messages = ChatMessage.query.filter_by(room_id=room_id)\
+                                  .order_by(ChatMessage.timestamp.asc())\
+                                  .paginate(page=page, per_page=per_page, error_out=False)
+        
+        # Convert to dict format
+        message_list = [msg.to_dict() for msg in messages.items]
+        
+        return jsonify({
+            'success': True,
+            'messages': message_list,
+            'pagination': {
+                'page': messages.page,
+                'pages': messages.pages,
+                'per_page': messages.per_page,
+                'total': messages.total,
+                'has_next': messages.has_next,
+                'has_prev': messages.has_prev
+            }
+        })
+        
+    except Exception as e:
+        app.logger.error(f"Error fetching chat messages: {str(e)}", exc_info=True)
+        return jsonify({'success': False, 'error': 'Failed to fetch messages'}), 500
+
+@app.route('/chat/messages', methods=['POST'])
+def save_chat_message():
+    """Save a new chat message to the database"""
+    try:
+        data = request.get_json()
+        
+        # Validate required fields
+        required_fields = ['roomId', 'senderName', 'senderRole', 'message']
+        if not data or not all(field in data for field in required_fields):
+            return jsonify({'success': False, 'error': 'Missing required fields'}), 400
+        
+        # Create new chat message
+        chat_message = ChatMessage(
+            room_id=data['roomId'],
+            sender_name=data['senderName'],
+            sender_role=data['senderRole'],
+            message_content=data['message'].strip(),
+            is_system_message=data.get('isSystemMessage', False)
+        )
+        
+        # Save to database
+        db.session.add(chat_message)
+        db.session.commit()
+        
+        app.logger.info(f"Chat message saved: {data['senderName']} in room {data['roomId']}")
+        
+        # Return the saved message
+        return jsonify({
+            'success': True,
+            'message': chat_message.to_dict()
+        }), 201
+        
+    except Exception as e:
+        db.session.rollback()
+        app.logger.error(f"Error saving chat message: {str(e)}", exc_info=True)
+        return jsonify({'success': False, 'error': 'Failed to save message'}), 500
+
+@app.route('/chat/rooms/<room_id>/clear', methods=['DELETE'])
+def clear_chat_history(room_id):
+    """Clear all chat messages for a room (admin/teacher only)"""
+    try:
+        # Optional: Add authentication check here
+        # For now, allowing any user to clear (you can add auth later)
+        
+        # Delete all messages for the room
+        deleted_count = ChatMessage.query.filter_by(room_id=room_id).delete()
+        db.session.commit()
+        
+        app.logger.info(f"Cleared {deleted_count} messages from room {room_id}")
+        
+        return jsonify({
+            'success': True,
+            'message': f'Cleared {deleted_count} messages',
+            'deletedCount': deleted_count
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        app.logger.error(f"Error clearing chat history: {str(e)}", exc_info=True)
+        return jsonify({'success': False, 'error': 'Failed to clear chat history'}), 500
+
+@app.route('/chat/rooms/<room_id>/stats', methods=['GET'])
+def get_chat_stats(room_id):
+    """Get chat statistics for a room"""
+    try:
+        total_messages = ChatMessage.query.filter_by(room_id=room_id).count()
+        
+        # Get unique participants
+        participants = db.session.query(ChatMessage.sender_name, ChatMessage.sender_role)\
+                                .filter_by(room_id=room_id)\
+                                .distinct().all()
+        
+        # Get latest message timestamp
+        latest_message = ChatMessage.query.filter_by(room_id=room_id)\
+                                         .order_by(ChatMessage.timestamp.desc()).first()
+        
+        return jsonify({
+            'success': True,
+            'stats': {
+                'totalMessages': total_messages,
+                'participantCount': len(participants),
+                'participants': [{'name': p.sender_name, 'role': p.sender_role} for p in participants],
+                'latestMessageTime': int(latest_message.timestamp.timestamp() * 1000) if latest_message else None
+            }
+        })
+        
+    except Exception as e:
+        app.logger.error(f"Error getting chat stats: {str(e)}", exc_info=True)
+        return jsonify({'success': False, 'error': 'Failed to get chat stats'}), 500
