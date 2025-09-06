@@ -17,7 +17,12 @@ const VideoComponent = ({ sessionId, role, studentName }) => {
         messages, 
         typingUsers, 
         sendMessage, 
-        sendTyping 
+        sendTyping,
+        videoEnabled,
+        audioEnabled,
+        toggleVideo,
+        toggleAudio,
+        endStream
     } = useMediasoup(roomId, role, studentName);
 
     // Debug: log props and roomId
@@ -205,6 +210,18 @@ const VideoComponent = ({ sessionId, role, studentName }) => {
                                     borderRadius: '8px'
                                 }}
                             />
+                            {/* Control Buttons for Teacher */}
+                            <div style={{ marginTop: '12px', display: 'flex', gap: '10px' }}>
+                                <button onClick={toggleVideo} style={{ padding: '8px 16px' }}>
+                                    {videoEnabled ? 'Disable Video' : 'Enable Video'}
+                                </button>
+                                <button onClick={toggleAudio} style={{ padding: '8px 16px' }}>
+                                    {audioEnabled ? 'Disable Audio' : 'Enable Audio'}
+                                </button>
+                                <button onClick={endStream} style={{ padding: '8px 16px', color: 'white', background: 'red' }}>
+                                    End Stream
+                                </button>
+                            </div>
                         </div>
                     )}
                     

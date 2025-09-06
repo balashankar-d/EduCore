@@ -15,6 +15,10 @@ export const useMediasoup = (roomId, role, studentName = null) => {
     const consumerRefs = useRef({ video: null, audio: null });
     const tracksRef = useRef({ video: null, audio: null });
 
+    // Video/audio enable/disable state
+    const [videoEnabled, setVideoEnabled] = useState(true);
+    const [audioEnabled, setAudioEnabled] = useState(true);
+
     // Helper to send requests to the server
     const request = (event, data = {}) => {
         console.log('[useMediasoup] Sending request:', event, data);
@@ -244,6 +248,35 @@ export const useMediasoup = (roomId, role, studentName = null) => {
         }
     };
 
+    // Toggle video
+    const toggleVideo = () => {
+        if (producerRef.current?.videoProducer) {
+            const enabled = !videoEnabled;
+            producerRef.current.videoProducer.track.enabled = enabled;
+            setVideoEnabled(enabled);
+        }
+    };
+
+    // Toggle audio
+    const toggleAudio = () => {
+        if (producerRef.current?.audioProducer) {
+            const enabled = !audioEnabled;
+            producerRef.current.audioProducer.track.enabled = enabled;
+            setAudioEnabled(enabled);
+        }
+    };
+
+    // End stream
+    const endStream = () => {
+        if (producerRef.current?.videoProducer) {
+            producerRef.current.videoProducer.close();
+        }
+        if (producerRef.current?.audioProducer) {
+            producerRef.current.audioProducer.close();
+        }
+        setStatus('Stream ended');
+    };
+
     return { 
         status, 
         localStream, 
@@ -254,6 +287,11 @@ export const useMediasoup = (roomId, role, studentName = null) => {
         typingUsers, 
         sendMessage, 
         sendTyping,
-        fetchChatHistory 
+        fetchChatHistory,
+        videoEnabled,
+        audioEnabled,
+        toggleVideo,
+        toggleAudio,
+        endStream
     };
 };
